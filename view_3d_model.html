@@ -1,0 +1,1445 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wing Model Viewer</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #2b2b2b;
+      --panel: #333333;
+      --panel-border: #4a4a4a;
+      --text: #cccccc;
+      --text-dim: #888888;
+      --text-bright: #e8e8e8;
+      --accent: #5b9bd5;
+      --accent-dim: #3a6a94;
+      --toolbar: #3c3c3c;
+      --input-bg: #404040;
+      --input-border: #555555;
+      --success: #6aab73;
+      --warn: #c9a44c;
+    }
+
+    body {
+      font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Menubar ─────────────────────────── */
+    .menubar {
+      height: 28px;
+      background: var(--toolbar);
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 2px;
+      font-size: 12px;
+    }
+
+    .menubar .menu-item {
+      padding: 3px 10px;
+      cursor: default;
+      border-radius: 3px;
+      color: var(--text);
+    }
+
+    .menubar .menu-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .menubar .spacer {
+      flex: 1;
+    }
+
+    .menubar .status {
+      color: var(--text-dim);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+    }
+
+    /* ── Toolbar ──────────────────────────── */
+    .toolbar {
+      height: 36px;
+      background: var(--toolbar);
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      gap: 2px;
+    }
+
+    .toolbar button {
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text);
+      padding: 4px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .toolbar button:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--panel-border);
+    }
+
+    .toolbar button.active {
+      background: rgba(91, 155, 213, 0.2);
+      border-color: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .toolbar .sep {
+      width: 1px;
+      height: 20px;
+      background: var(--panel-border);
+      margin: 0 4px;
+    }
+
+    .toolbar .tb-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin: 0 4px;
+    }
+
+    /* ── Main Layout ─────────────────────── */
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Left Panel ──────────────────────── */
+    .left-panel {
+      width: 280px;
+      background: var(--panel);
+      border-right: 1px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .panel-section {
+      border-bottom: 1px solid var(--panel-border);
+    }
+
+    .panel-header {
+      padding: 7px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      background: rgba(0, 0, 0, 0.15);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+    }
+
+    .panel-header .arrow {
+      font-size: 8px;
+      color: var(--text-dim);
+    }
+
+    .panel-body {
+      padding: 8px 10px;
+    }
+
+    .prop-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+      font-size: 11px;
+    }
+
+    .prop-label {
+      width: 110px;
+      color: var(--text-dim);
+      flex-shrink: 0;
+    }
+
+    .prop-value {
+      flex: 1;
+      color: var(--text-bright);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+    }
+
+    .prop-row input[type="range"] {
+      flex: 1;
+      height: 4px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .prop-row input[type="number"] {
+      width: 60px;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      color: var(--text-bright);
+      padding: 2px 5px;
+      border-radius: 2px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+    }
+
+    .prop-row input[type="number"]:focus {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .prop-row select {
+      flex: 1;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      color: var(--text-bright);
+      padding: 2px 5px;
+      border-radius: 2px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 11px;
+    }
+
+    .btn-sm {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      color: var(--text);
+      padding: 4px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    .btn-sm:hover {
+      border-color: var(--accent);
+    }
+
+    .btn-sm.primary {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    /* ── Viewport ─────────────────────────── */
+    .viewport-container {
+      flex: 1;
+      position: relative;
+      background: #1e1e1e;
+    }
+
+    #viewport-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Axis Indicator */
+    .axis-indicator {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      width: 80px;
+      height: 80px;
+      pointer-events: none;
+    }
+
+    /* Viewport label */
+    .viewport-label {
+      position: absolute;
+      top: 8px;
+      left: 10px;
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: 'IBM Plex Mono', monospace;
+      pointer-events: none;
+    }
+
+    /* Coordinate readout */
+    .coord-readout {
+      position: absolute;
+      bottom: 8px;
+      right: 12px;
+      font-size: 10px;
+      color: var(--text-dim);
+      font-family: 'IBM Plex Mono', monospace;
+      pointer-events: none;
+      text-align: right;
+    }
+
+    /* ── Right Panel ──────────────────────── */
+    .right-panel {
+      width: 260px;
+      background: var(--panel);
+      border-left: 1px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    /* ── Live Graph ───────────────────────── */
+    .graph-container {
+      padding: 8px;
+    }
+
+    .graph-container canvas {
+      width: 100%;
+      height: 100px;
+      background: var(--input-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 2px;
+    }
+
+    .graph-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 3px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    /* ── Statusbar ────────────────────────── */
+    .statusbar {
+      height: 22px;
+      background: var(--accent-dim);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 11px;
+      color: #fff;
+      gap: 16px;
+    }
+
+    .statusbar .sep {
+      width: 1px;
+      height: 14px;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .statusbar .dim {
+      opacity: 0.7;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--panel);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--panel-border);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #666;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Menubar -->
+  <div class="menubar">
+    <span class="menu-item">File</span>
+    <span class="menu-item">View</span>
+    <span class="menu-item">Model</span>
+    <span class="menu-item">Analysis</span>
+    <span class="menu-item">Help</span>
+    <span class="spacer"></span>
+    <span class="status" id="fps-counter">-- fps</span>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button id="btn-play" title="Simulate predicted wing motion">▶ Simulate</button>
+    <button id="btn-stop" title="Reset to frame 0">⏹ Reset</button>
+    <div class="sep"></div>
+    <button id="btn-wireframe" title="Toggle wireframe overlay">▦ Wireframe</button>
+    <button id="btn-axes" class="active" title="Toggle axes">⊕ Axes</button>
+    <button id="btn-grid" class="active" title="Toggle grid">⊞ Grid</button>
+    <div class="sep"></div>
+    <span class="tb-label">View:</span>
+    <button id="btn-front" title="Front view">Front</button>
+    <button id="btn-top" title="Top view">Top</button>
+    <button id="btn-iso" title="Isometric view">Iso</button>
+    <div class="sep"></div>
+    <button id="btn-fit" title="Fit model in view">Fit All</button>
+    <div class="sep"></div>
+    <button id="btn-load-csv" title="Load tracked keypoints CSV to drive animation from real data">📂 Load CSV</button>
+    <button id="btn-export" title="Export current STL">⬇ Load STL</button>
+  </div>
+
+  <!-- Main content -->
+  <div class="main">
+
+    <!-- Left Panel: Properties -->
+    <div class="left-panel">
+
+      <div class="panel-section">
+        <div class="panel-header"><span class="arrow">▼</span> Specimen</div>
+        <div class="panel-body">
+          <div class="prop-row"><span class="prop-label">Species</span><span class="prop-value">Morpho peleides</span>
+          </div>
+          <div class="prop-row"><span class="prop-label">Source</span><span class="prop-value">NJVID Collection</span>
+          </div>
+          <div class="prop-row"><span class="prop-label">Wingspan (half)</span><span class="prop-value">55 mm</span>
+          </div>
+          <div class="prop-row"><span class="prop-label">FW Chord</span><span class="prop-value">25 → 8 mm</span></div>
+          <div class="prop-row"><span class="prop-label">HW Chord</span><span class="prop-value">22 → 12 mm</span></div>
+          <div class="prop-row"><span class="prop-label">Membrane</span><span class="prop-value">0.5 mm</span></div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-header"><span class="arrow">▼</span> Tracked Kinematics</div>
+        <div class="panel-body">
+          <div class="prop-row"><span class="prop-label">Frame Rate</span><span class="prop-value">120 fps</span></div>
+          <div class="prop-row"><span class="prop-label">Freq (FFT)</span><span class="prop-value">12.00 Hz</span></div>
+          <div class="prop-row"><span class="prop-label">Freq (Peaks)</span><span class="prop-value">11.95 Hz</span>
+          </div>
+          <div class="prop-row"><span class="prop-label">Stroke Amp</span><span class="prop-value">88.14°</span></div>
+          <div class="prop-row"><span class="prop-label">Duration</span><span class="prop-value">1.992 s</span></div>
+          <div class="prop-row"><span class="prop-label">Frames</span><span class="prop-value">240</span></div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-header"><span class="arrow">▼</span> Animation Inputs</div>
+        <div class="panel-body">
+          <div class="prop-row">
+            <span class="prop-label">Frequency (Hz)</span>
+            <input type="number" id="input-freq" value="12.0" min="1" max="30" step="0.5">
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Amplitude (°)</span>
+            <input type="number" id="input-amp" value="44" min="5" max="90" step="1">
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">FW/HW Phase (°)</span>
+            <input type="number" id="input-phase" value="15" min="0" max="90" step="1">
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Asymmetry (%)</span>
+            <input type="number" id="input-asym" value="5" min="0" max="30" step="1">
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">2nd Harmonic</span>
+            <input type="range" id="input-harmonic" min="0" max="0.4" step="0.01" value="0.15">
+            <span class="prop-value" id="harmonic-val" style="width:30px;text-align:right">0.15</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Playback Speed</span>
+            <input type="range" id="input-speed" min="0.01" max="1.0" step="0.01" value="0.08">
+            <span class="prop-value" id="speed-val" style="width:38px;text-align:right">0.08x</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <button class="btn-sm primary" id="btn-apply">Apply</button>
+            <button class="btn-sm" id="btn-defaults">Reset Defaults</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-header"><span class="arrow">▼</span> Mesh Info</div>
+        <div class="panel-body">
+          <div class="prop-row"><span class="prop-label">Vertices</span><span class="prop-value"
+              id="info-verts">—</span></div>
+          <div class="prop-row"><span class="prop-label">Faces</span><span class="prop-value" id="info-faces">—</span>
+          </div>
+          <div class="prop-row"><span class="prop-label">Bounding Box</span><span class="prop-value"
+              id="info-bbox">—</span></div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-header"><span class="arrow">▼</span> Motion Equations</div>
+        <div class="panel-body"
+          style="font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.6;color:var(--text-dim);">
+          <div>θ_fw(t) = A·sin(2πft)</div>
+          <div style="margin-left:22px;">+ h·sin(4πft + 0.3)</div>
+          <div style="margin-left:22px;">+ 0.05·sin(6πft + 0.7)</div>
+          <div style="margin-top:4px;">θ_hw(t) = A_hw·sin(2πft + φ)</div>
+          <div style="margin-top:4px;">θ_L = θ × (1 + asym/100)</div>
+          <div>θ_R = θ × (1 − asym/100)</div>
+          <div style="margin-top:6px;font-size:9px;color:#666;">Parameters from FFT analysis of<br>tracked video
+            keypoint data</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Viewport -->
+    <div class="viewport-container" id="viewport-container">
+      <div class="viewport-label">Perspective — Orbit: LMB | Pan: MMB/Shift+LMB | Zoom: Scroll</div>
+      <div class="coord-readout" id="coord-readout">
+        <div id="angle-readout">FW: 0.0° | HW: 0.0°</div>
+        <div id="time-readout">t = 0.000 s</div>
+      </div>
+      <canvas id="axis-canvas" class="axis-indicator" width="160" height="160"></canvas>
+    </div>
+
+    <!-- Right Panel: Live Data -->
+    <div class="right-panel">
+      <div class="panel-section">
+        <div class="panel-header"><span class="arrow">▼</span> Forewing Angle</div>
+        <div class="graph-container">
+          <canvas id="graph-fw" width="480" height="200"></canvas>
+          <div class="graph-label">θ_fw (deg) vs t (s)</div>
+        </div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-header"><span class="arrow">▼</span> Hindwing Angle</div>
+        <div class="graph-container">
+          <canvas id="graph-hw" width="480" height="200"></canvas>
+          <div class="graph-label">θ_hw (deg) vs t (s)</div>
+        </div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-header"><span class="arrow">▼</span> Angular Velocity</div>
+        <div class="graph-container">
+          <canvas id="graph-vel" width="480" height="200"></canvas>
+          <div class="graph-label">ω (rad/s) vs t (s)</div>
+        </div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-header"><span class="arrow">▼</span> Current State</div>
+        <div class="panel-body">
+          <div class="prop-row"><span class="prop-label">Time</span><span class="prop-value" id="state-time">0.000
+              s</span></div>
+          <div class="prop-row"><span class="prop-label">FW Right</span><span class="prop-value"
+              id="state-fwr">0.0°</span></div>
+          <div class="prop-row"><span class="prop-label">FW Left</span><span class="prop-value"
+              id="state-fwl">0.0°</span></div>
+          <div class="prop-row"><span class="prop-label">HW Right</span><span class="prop-value"
+              id="state-hwr">0.0°</span></div>
+          <div class="prop-row"><span class="prop-label">HW Left</span><span class="prop-value"
+              id="state-hwl">0.0°</span></div>
+          <div class="prop-row"><span class="prop-label">Velocity</span><span class="prop-value" id="state-vel">0.0
+              rad/s</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Statusbar -->
+  <div class="statusbar">
+    <span>Wing Model Viewer</span>
+    <span class="sep"></span>
+    <span class="dim" id="sb-status">Model loaded — parameters from tracked kinematic data</span>
+    <span class="sep"></span>
+    <span class="dim" id="sb-anim">Stationary — press Simulate to predict movement</span>
+    <span style="flex:1"></span>
+    <span class="dim">Morpho peleides — NJVID Tracked Data</span>
+  </div>
+
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+
+  <script>
+    // Wing outlines directly in XY space (mm, right wing)
+    // X = outward (east), Y = along body (positive = toward head)
+    // Based on Morpho peleides dorsal reference:
+    //   FW sweeps forward-outward (northeast)
+    //   HW sweeps backward-outward (southeast)
+
+    function bezier3(p0, p1, p2, p3, t) {
+      const u = 1 - t;
+      return [
+        u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0],
+        u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1],
+      ];
+    }
+
+    function sampleBezierChain(segments, nPerSeg) {
+      const pts = [];
+      for (const seg of segments) {
+        for (let i = 0; i < nPerSeg; i++) {
+          pts.push(bezier3(seg[0], seg[1], seg[2], seg[3], i / nPerSeg));
+        }
+      }
+      pts.push(segments[segments.length - 1][3]);
+      return pts;
+    }
+
+    // Forewing (right side): extends outward (+X) and forward (+Y)
+    const FW_OUTLINE = [
+      // Leading edge: root → apex (sweeps forward-outward)
+      [[0, 0], [10, 12], [25, 28], [45, 35]],
+      // Apex → outer trailing
+      [[45, 35], [52, 30], [55, 20], [50, 8]],
+      // Trailing edge back to root
+      [[50, 8], [40, -2], [22, -6], [0, -4]],
+      // Close trailing to root
+      [[0, -4], [0, -2], [0, -1], [0, 0]],
+    ];
+
+    // Hindwing (right side): extends outward (+X) and backward (-Y)
+    const HW_OUTLINE = [
+      // Leading edge: root → tip (sweeps backward-outward)
+      [[0, 0], [8, -4], [22, -10], [38, -18]],
+      // Outer rounded edge
+      [[38, -18], [42, -24], [40, -32], [32, -36]],
+      // Trailing edge back to root
+      [[32, -36], [20, -34], [8, -26], [0, -16]],
+      // Close to root
+      [[0, -16], [0, -10], [0, -4], [0, 0]],
+    ];
+
+    // Build wing mesh from XY outline with vertex colors for iridescent gradient
+    function createWingMesh(outlineSegs, side, thickness) {
+      thickness = thickness || 0.3;
+      const nPerSeg = 12;
+      const outline2D = sampleBezierChain(outlineSegs, nPerSeg);
+      const n = outline2D.length;
+
+      let cx = 0, cy = 0;
+      for (const p of outline2D) { cx += p[0]; cy += p[1]; }
+      cx /= n; cy /= n;
+
+      // Find max distance from root for color gradient
+      let maxDist = 0;
+      for (const p of outline2D) {
+        const d = Math.sqrt(p[0] * p[0] + p[1] * p[1]);
+        if (d > maxDist) maxDist = d;
+      }
+
+      const geom = new THREE.BufferGeometry();
+      const verts = [];
+      const colors = [];
+      const indices = [];
+      const sideSign = side === 'right' ? 1 : -1;
+
+      // Morpho blue gradient: dark at root → bright blue mid → dark border
+      function wingColor(x, y) {
+        const dist = Math.sqrt(x * x + y * y);
+        const t = dist / maxDist;  // 0=root, 1=tip
+        // Iridescent blue: dark root (0.05,0.1,0.25) → bright mid (0.08,0.4,0.95) → dark edge (0.02,0.05,0.15)
+        let r, g, b;
+        if (t < 0.5) {
+          const s = t / 0.5;
+          r = 0.05 + s * 0.03;
+          g = 0.10 + s * 0.30;
+          b = 0.25 + s * 0.70;
+        } else {
+          const s = (t - 0.5) / 0.5;
+          r = 0.08 - s * 0.06;
+          g = 0.40 - s * 0.35;
+          b = 0.95 - s * 0.80;
+        }
+        return [r, g, b];
+      }
+
+      // Top ring
+      for (const p of outline2D) {
+        verts.push(p[0] * sideSign, p[1], thickness / 2);
+        const [r, g, b] = wingColor(p[0], p[1]);
+        colors.push(r, g, b);
+      }
+      // Bottom ring
+      for (const p of outline2D) {
+        verts.push(p[0] * sideSign, p[1], -thickness / 2);
+        const [r, g, b] = wingColor(p[0], p[1]);
+        colors.push(r, g, b);
+      }
+      // Center vertices (dark root color)
+      const topCenter = verts.length / 3;
+      verts.push(cx * sideSign, cy, thickness / 2);
+      colors.push(0.03, 0.06, 0.18);
+      const botCenter = verts.length / 3;
+      verts.push(cx * sideSign, cy, -thickness / 2);
+      colors.push(0.03, 0.06, 0.18);
+
+      // Top face fan
+      for (let i = 0; i < n; i++) {
+        indices.push(topCenter, i, (i + 1) % n);
+      }
+      // Bottom face fan (reversed)
+      for (let i = 0; i < n; i++) {
+        indices.push(botCenter, n + (i + 1) % n, n + i);
+      }
+      // Edge strip
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        indices.push(i, n + i, n + j);
+        indices.push(i, n + j, j);
+      }
+
+      geom.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      geom.setIndex(indices);
+      geom.computeVertexNormals();
+      return geom;
+    }
+
+    // Wing vein lines as dark curves on the surface
+    function createWingVeins(outlineSegs, side) {
+      const sideSign = side === 'right' ? 1 : -1;
+      const veins = new THREE.Group();
+      const mat = new THREE.LineBasicMaterial({ color: 0x0a1530, linewidth: 1.5 });
+
+      // Radial veins from root toward outline points
+      const outline = sampleBezierChain(outlineSegs, 8);
+      const step = Math.floor(outline.length / 6);
+      for (let v = 0; v < 6; v++) {
+        const idx = Math.min(v * step + step, outline.length - 1);
+        const tip = outline[idx];
+        const pts = [];
+        for (let t = 0; t <= 8; t++) {
+          const s = t / 8;
+          const x = s * tip[0] * sideSign;
+          const y = s * tip[1];
+          pts.push(new THREE.Vector3(x, y, 0.2));
+        }
+        const geom = new THREE.BufferGeometry().setFromPoints(pts);
+        veins.add(new THREE.Line(geom, mat));
+      }
+      return veins;
+    }
+
+    function createBody() {
+      const geom = new THREE.BufferGeometry();
+      const verts = [], indices = [];
+      const nSeg = 20, nCirc = 14;
+
+      // Body runs along Y axis: head at +Y (top of screen), abdomen at -Y
+      const totalLen = 22;
+      for (let i = 0; i <= nSeg; i++) {
+        const t = i / nSeg;
+        const y = 3 - t * totalLen;  // head at +Y, tail at -Y
+        let rx, rz;
+
+        if (t < 0.12) {
+          const ht = t / 0.12;
+          const r = 2.2 * Math.sin(Math.PI * ht);
+          rx = r; rz = r;
+        } else if (t < 0.15) {
+          rx = 1.2; rz = 1.0;
+        } else if (t < 0.35) {
+          const th = (t - 0.15) / 0.2;
+          rx = 2.0 + 0.8 * Math.sin(Math.PI * th);
+          rz = 1.5 + 0.5 * Math.sin(Math.PI * th);
+        } else {
+          const ab = (t - 0.35) / 0.65;
+          rx = 2.0 * (1 - ab * 0.85);
+          rz = 1.5 * (1 - ab * 0.8);
+        }
+
+        for (let j = 0; j < nCirc; j++) {
+          const th = 2 * Math.PI * j / nCirc;
+          verts.push(rx * Math.cos(th), y, rz * Math.sin(th));
+        }
+      }
+      for (let i = 0; i < nSeg; i++) {
+        for (let j = 0; j < nCirc; j++) {
+          const a = i * nCirc + j, b = i * nCirc + (j + 1) % nCirc;
+          const c = (i + 1) * nCirc + j, d = (i + 1) * nCirc + (j + 1) % nCirc;
+          indices.push(a, b, d, a, d, c);
+        }
+      }
+      // Cap ends
+      const headCenter = verts.length / 3;
+      verts.push(0, 3, 0);
+      for (let j = 0; j < nCirc; j++) {
+        indices.push(headCenter, (j + 1) % nCirc, j);
+      }
+      const tailCenter = verts.length / 3;
+      verts.push(0, 3 - totalLen, 0);
+      for (let j = 0; j < nCirc; j++) {
+        const base = nSeg * nCirc;
+        indices.push(tailCenter, base + j, base + (j + 1) % nCirc);
+      }
+
+      // Antennae curve forward (+Y direction)
+      const antLen = 12, antR = 0.15, antSegs = 6, antCirc = 6;
+      for (let side = -1; side <= 1; side += 2) {
+        const off = verts.length / 3;
+        for (let i = 0; i <= antSegs; i++) {
+          const t = i / antSegs;
+          const ax = side * (1.5 + t * 3);
+          const ay = 3 + t * antLen * 0.3;
+          const az = 1.0 + t * 5;
+          for (let j = 0; j < antCirc; j++) {
+            const th = 2 * Math.PI * j / antCirc;
+            verts.push(ax + antR * Math.cos(th), ay + antR * Math.sin(th), az);
+          }
+        }
+        for (let i = 0; i < antSegs; i++) {
+          for (let j = 0; j < antCirc; j++) {
+            const a = off + i * antCirc + j;
+            const b = off + i * antCirc + (j + 1) % antCirc;
+            const c = off + (i + 1) * antCirc + j;
+            const d = off + (i + 1) * antCirc + (j + 1) % antCirc;
+            indices.push(a, b, d, a, d, c);
+          }
+        }
+      }
+
+      geom.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      geom.setIndex(indices);
+      geom.computeVertexNormals();
+      return geom;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  SCENE SETUP
+    // ═══════════════════════════════════════════════════
+
+    const container = document.getElementById('viewport-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1e1e1e);
+
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
+    camera.position.set(0, 0, 140);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.insertBefore(renderer.domElement, container.firstChild);
+    renderer.domElement.id = 'viewport-canvas';
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, -5, 0);
+
+    // Lighting — enhanced for iridescent effect
+    scene.add(new THREE.AmbientLight(0x667799, 0.5));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(40, 60, 80);
+    scene.add(dirLight);
+    const fillLight = new THREE.DirectionalLight(0x4466aa, 0.4);
+    fillLight.position.set(-30, -20, 60);
+    scene.add(fillLight);
+    const rimLight = new THREE.DirectionalLight(0x88aaff, 0.3);
+    rimLight.position.set(0, 0, -60);
+    scene.add(rimLight);
+    // Hemisphere light for sky/ground color bleed
+    const hemiLight = new THREE.HemisphereLight(0x6688cc, 0x222244, 0.35);
+    scene.add(hemiLight);
+
+    // Grid (rotated to XY plane)
+    const gridHelper = new THREE.GridHelper(200, 40, 0x333344, 0x252535);
+    gridHelper.rotation.x = Math.PI / 2;
+    scene.add(gridHelper);
+
+    // Floor plane (XY, subtle)
+    const planeGeo = new THREE.PlaneGeometry(200, 200);
+    const planeMat = new THREE.MeshBasicMaterial({ color: 0x151520, side: THREE.DoubleSide, transparent: true, opacity: 0.25 });
+    const planeMesh = new THREE.Mesh(planeGeo, planeMat);
+    planeMesh.position.z = -0.3;
+    scene.add(planeMesh);
+
+    // Axes
+    const axesHelper = new THREE.AxesHelper(30);
+    scene.add(axesHelper);
+
+    // Origin marker
+    const originGeo = new THREE.SphereGeometry(0.4, 8, 8);
+    const originMat = new THREE.MeshBasicMaterial({ color: 0xcccccc });
+    scene.add(new THREE.Mesh(originGeo, originMat));
+
+    // ═══════════════════════════════════════════════════
+    //  BUILD BUTTERFLY MESHES
+    // ═══════════════════════════════════════════════════
+
+    // Wing material with vertex colors for iridescent gradient
+    const wingMat = new THREE.MeshPhongMaterial({
+      vertexColors: true,
+      emissive: 0x041030,
+      specular: 0x88aaff,
+      shininess: 120,
+      side: THREE.DoubleSide,
+    });
+    const wingMatWire = new THREE.MeshBasicMaterial({ color: 0x4488cc, wireframe: true, transparent: true, opacity: 0.25 });
+    const bodyMat = new THREE.MeshPhongMaterial({ color: 0x0e0e0e, specular: 0x444455, shininess: 60, side: THREE.DoubleSide });
+
+    // Wing meshes — outlines already encode FW forward, HW backward splay
+    const fwGeomR = createWingMesh(FW_OUTLINE, 'right');
+    const fwGeomL = createWingMesh(FW_OUTLINE, 'left');
+    const hwGeomR = createWingMesh(HW_OUTLINE, 'right');
+    const hwGeomL = createWingMesh(HW_OUTLINE, 'left');
+    const bodyGeom = createBody();
+
+    // Wing pivots (groups for rotation about the thorax-wing junction)
+    const fwPivotR = new THREE.Group();
+    const fwPivotL = new THREE.Group();
+    const hwPivotR = new THREE.Group();
+    const hwPivotL = new THREE.Group();
+
+    // Forewing meshes + veins
+    const fwMeshR = new THREE.Mesh(fwGeomR, wingMat);
+    fwPivotR.add(fwMeshR);
+    const fwWireR = new THREE.Mesh(fwGeomR, wingMatWire);
+    fwWireR.visible = false;
+    fwPivotR.add(fwWireR);
+    fwPivotR.add(createWingVeins(FW_OUTLINE, 'right'));
+
+    const fwMeshL = new THREE.Mesh(fwGeomL, wingMat);
+    fwPivotL.add(fwMeshL);
+    const fwWireL = new THREE.Mesh(fwGeomL, wingMatWire);
+    fwWireL.visible = false;
+    fwPivotL.add(fwWireL);
+    fwPivotL.add(createWingVeins(FW_OUTLINE, 'left'));
+
+    // Hindwing meshes + veins
+    const hwMeshR = new THREE.Mesh(hwGeomR, wingMat);
+    hwPivotR.add(hwMeshR);
+    const hwWireR = new THREE.Mesh(hwGeomR, wingMatWire);
+    hwWireR.visible = false;
+    hwPivotR.add(hwWireR);
+    hwPivotR.add(createWingVeins(HW_OUTLINE, 'right'));
+
+    const hwMeshL = new THREE.Mesh(hwGeomL, wingMat);
+    hwPivotL.add(hwMeshL);
+    const hwWireL = new THREE.Mesh(hwGeomL, wingMatWire);
+    hwWireL.visible = false;
+    hwPivotL.add(hwWireL);
+    hwPivotL.add(createWingVeins(HW_OUTLINE, 'left'));
+
+    // Body
+    const bodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
+
+    const butterflyGroup = new THREE.Group();
+    butterflyGroup.add(fwPivotR, fwPivotL, hwPivotR, hwPivotL, bodyMesh);
+    scene.add(butterflyGroup);
+
+    // Count mesh info
+    let totalVerts = 0, totalFaces = 0;
+    butterflyGroup.traverse(c => {
+      if (c.isMesh && c.geometry && c.material !== wingMatWire) {
+        const pos = c.geometry.getAttribute('position');
+        if (pos) totalVerts += pos.count;
+        const idx = c.geometry.getIndex();
+        if (idx) totalFaces += idx.count / 3;
+      }
+    });
+    document.getElementById('info-verts').textContent = totalVerts.toLocaleString();
+    document.getElementById('info-faces').textContent = totalFaces.toLocaleString();
+
+    // Compute actual bounding box
+    const bbox = new THREE.Box3().setFromObject(butterflyGroup);
+    const size = bbox.getSize(new THREE.Vector3());
+    document.getElementById('info-bbox').textContent = `${size.x.toFixed(0)} × ${size.y.toFixed(0)} × ${size.z.toFixed(0)} mm`;
+
+    // ═══════════════════════════════════════════════════
+    //  KINEMATIC ANIMATION
+    //  Using the tracked equations from our pipeline:
+    //  θ(t) = A·sin(2πft) + h·sin(4πft+0.3) + 0.05·sin(6πft+0.7)
+    // ═══════════════════════════════════════════════════
+
+    // All parameters derived from tracked flight data (120fps video, FFT analysis)
+    // Freq: 12 Hz from FFT peak. Amplitude: 44° half-amplitude (88.14° stroke).
+    let animParams = {
+      freq: 12.0,          // from tracked FFT analysis
+      amplitude: 44.0,     // half of 88.14° stroke amplitude
+      hwRatio: 0.73,       // hindwing amplitude ratio (from literature)
+      phaseLag: 15.0,      // FW/HW phase lag in degrees
+      asymmetry: 5.0,      // % left/right difference
+      harmonic2: 0.15,     // 2nd harmonic contribution
+      speed: 0.08,         // default 0.08x real-time (~1 wingbeat/sec for study)
+    };
+
+    let playing = false;
+    let simTime = 0;
+    let prevTimestamp = 0;
+
+    // Data-driven animation from loaded CSV
+    let csvMode = false;
+    let trackedFrames = [];  // [{t, fwR, fwL, hwR, hwL}, ...]
+    let csvFPS = 30;
+    let dataFrameIdx = 0;
+
+    // History buffers for graphs
+    const GRAPH_LEN = 300;
+    const histFW = new Float32Array(GRAPH_LEN);
+    const histHW = new Float32Array(GRAPH_LEN);
+    const histVel = new Float32Array(GRAPH_LEN);
+    let histIdx = 0;
+
+    function computeWingAngle(t, freq, amp, phase, asym, harm2, side) {
+      const ampRad = amp * Math.PI / 180;
+      const phaseRad = phase * Math.PI / 180;
+      const asymFactor = side === 'left' ? (1 + asym / 100) : (1 - asym / 100);
+
+      // Multi-harmonic model from tracked data analysis
+      const theta = ampRad * asymFactor * (
+        Math.sin(2 * Math.PI * freq * t) +
+        harm2 * Math.sin(4 * Math.PI * freq * t + 0.3) +
+        0.05 * Math.sin(6 * Math.PI * freq * t + 0.7)
+      );
+      return theta;
+    }
+
+    function computeHWAngle(t, freq, amp, phase, asym, harm2, side) {
+      const phaseRad = phase * Math.PI / 180;
+      return computeWingAngle(t + phaseRad / (2 * Math.PI * freq), freq, amp * animParams.hwRatio, 0, asym, harm2 * 0.5, side);
+    }
+
+    function updateAnimation(dt) {
+      if (!playing) return;
+
+      let fwR, fwL, hwR, hwL, vel;
+
+      if (csvMode && trackedFrames.length > 0) {
+        // Data-driven mode: play back tracked angles frame by frame
+        simTime += dt * animParams.speed;
+        dataFrameIdx = Math.floor(simTime * csvFPS) % trackedFrames.length;
+        const f = trackedFrames[dataFrameIdx];
+        fwR = f.fwR;
+        fwL = f.fwL;
+        hwR = f.hwR;
+        hwL = f.hwL;
+
+        // Velocity from consecutive frames
+        const prev = trackedFrames[(dataFrameIdx - 1 + trackedFrames.length) % trackedFrames.length];
+        vel = (f.fwR - prev.fwR) * csvFPS;
+      } else {
+        // Parametric mode
+        simTime += dt * animParams.speed;
+        const p = animParams;
+        fwR = computeWingAngle(simTime, p.freq, p.amplitude, 0, p.asymmetry, p.harmonic2, 'right');
+        fwL = computeWingAngle(simTime, p.freq, p.amplitude, 0, p.asymmetry, p.harmonic2, 'left');
+        hwR = computeHWAngle(simTime, p.freq, p.amplitude, p.phaseLag, p.asymmetry, p.harmonic2, 'right');
+        hwL = computeHWAngle(simTime, p.freq, p.amplitude, p.phaseLag, p.asymmetry, p.harmonic2, 'left');
+
+        const dtSmall = 0.001;
+        const fwR2 = computeWingAngle(simTime + dtSmall, p.freq, p.amplitude, 0, p.asymmetry, p.harmonic2, 'right');
+        vel = (fwR2 - fwR) / dtSmall;
+      }
+
+      // Apply to wing pivots
+      fwPivotR.rotation.y = fwR;
+      fwPivotL.rotation.y = -fwL;
+      hwPivotR.rotation.y = hwR;
+      hwPivotL.rotation.y = -hwL;
+
+      // Update readouts
+      const fwDeg = (fwR * 180 / Math.PI);
+      const hwDeg = (hwR * 180 / Math.PI);
+      document.getElementById('angle-readout').textContent = `FW: ${fwDeg.toFixed(1)}° | HW: ${hwDeg.toFixed(1)}°`;
+      document.getElementById('time-readout').textContent = `t = ${simTime.toFixed(3)} s`;
+      document.getElementById('state-time').textContent = `${simTime.toFixed(3)} s`;
+      document.getElementById('state-fwr').textContent = `${fwDeg.toFixed(1)}°`;
+      document.getElementById('state-fwl').textContent = `${(fwL * 180 / Math.PI).toFixed(1)}°`;
+      document.getElementById('state-hwr').textContent = `${hwDeg.toFixed(1)}°`;
+      document.getElementById('state-hwl').textContent = `${(hwL * 180 / Math.PI).toFixed(1)}°`;
+      document.getElementById('state-vel').textContent = `${vel.toFixed(1)} rad/s`;
+
+      if (csvMode) {
+        document.getElementById('sb-anim').textContent =
+          `Tracked data — frame ${dataFrameIdx + 1}/${trackedFrames.length}`;
+      }
+
+      // Update history
+      histFW[histIdx % GRAPH_LEN] = fwDeg;
+      histHW[histIdx % GRAPH_LEN] = hwDeg;
+      histVel[histIdx % GRAPH_LEN] = vel;
+      histIdx++;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  LIVE GRAPHS
+    // ═══════════════════════════════════════════════════
+
+    function drawGraph(canvasId, data, color, label, yMin, yMax) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Background
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(0, 0, w, h);
+
+      // Grid
+      ctx.strokeStyle = '#3a3a3a';
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i <= 4; i++) {
+        const y = h * i / 4;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      }
+
+      // Zero line
+      const zeroY = h * (1 - (0 - yMin) / (yMax - yMin));
+      ctx.strokeStyle = '#555';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Data line
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const n = Math.min(histIdx, GRAPH_LEN);
+      for (let i = 0; i < n; i++) {
+        const idx = (histIdx - n + i + GRAPH_LEN) % GRAPH_LEN;
+        const x = w * i / GRAPH_LEN;
+        const y = h * (1 - (data[idx] - yMin) / (yMax - yMin));
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Current position marker
+      if (n > 0) {
+        const lastIdx = (histIdx - 1 + GRAPH_LEN) % GRAPH_LEN;
+        const cx = w * (n - 1) / GRAPH_LEN;
+        const cy = h * (1 - (data[lastIdx] - yMin) / (yMax - yMin));
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+
+      // Y-axis labels
+      ctx.fillStyle = '#666';
+      ctx.font = '9px IBM Plex Mono';
+      ctx.fillText(`${yMax}`, 2, 10);
+      ctx.fillText(`${yMin}`, 2, h - 3);
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  AXIS INDICATOR (bottom-left gizmo)
+    // ═══════════════════════════════════════════════════
+
+    function drawAxisIndicator() {
+      const canvas = document.getElementById('axis-canvas');
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width / 2, h = canvas.height / 2;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const camDir = new THREE.Vector3();
+      camera.getWorldDirection(camDir);
+      const camUp = camera.up.clone();
+      const camRight = new THREE.Vector3().crossVectors(camDir, camUp).normalize();
+      const camUpN = new THREE.Vector3().crossVectors(camRight, camDir).normalize();
+
+      const len = 28;
+      const axes = [
+        { dir: new THREE.Vector3(1, 0, 0), color: '#e74c3c', label: 'X' },
+        { dir: new THREE.Vector3(0, 1, 0), color: '#2ecc71', label: 'Y' },
+        { dir: new THREE.Vector3(0, 0, 1), color: '#3498db', label: 'Z' },
+      ];
+
+      // Sort by depth for proper drawing order
+      axes.sort((a, b) => a.dir.dot(camDir) - b.dir.dot(camDir));
+
+      for (const ax of axes) {
+        const px = ax.dir.dot(camRight) * len;
+        const py = -ax.dir.dot(camUpN) * len;
+
+        ctx.strokeStyle = ax.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(w, h);
+        ctx.lineTo(w + px, h + py);
+        ctx.stroke();
+
+        ctx.fillStyle = ax.color;
+        ctx.font = 'bold 11px IBM Plex Mono';
+        ctx.fillText(ax.label, w + px * 1.15 - 4, h + py * 1.15 + 4);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  STL IMPORT (Load STL button)
+    // ═══════════════════════════════════════════════════
+
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.stl';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const loader = new THREE.STLLoader();
+          const geom = loader.parse(ev.target.result);
+          geom.computeVertexNormals();
+          geom.computeBoundingBox();
+          const box = geom.boundingBox;
+          const center = new THREE.Vector3();
+          box.getCenter(center);
+          geom.translate(-center.x, -center.y, -center.z);
+
+          const mat = new THREE.MeshPhongMaterial({ color: 0x2874a6, side: THREE.DoubleSide, shininess: 60 });
+          const mesh = new THREE.Mesh(geom, mat);
+          scene.add(mesh);
+          document.getElementById('sb-status').textContent = `Imported: ${file.name}`;
+        };
+        reader.readAsArrayBuffer(file);
+      };
+      input.click();
+    });
+
+    // ═══════════════════════════════════════════════════
+    //  CSV IMPORT (Load tracked keypoints)
+    // ═══════════════════════════════════════════════════
+
+    document.getElementById('btn-load-csv').addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.csv';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const text = ev.target.result;
+          const lines = text.split('\n');
+
+          // Parse FPS from comment header
+          for (const line of lines) {
+            const m = line.match(/^#\s*FPS:\s*([\d.]+)/i);
+            if (m) { csvFPS = parseFloat(m[1]); break; }
+          }
+
+          // Find header line (first non-comment line with 'frame' in it)
+          let headerIdx = -1;
+          for (let i = 0; i < lines.length; i++) {
+            if (!lines[i].startsWith('#') && lines[i].includes('frame')) {
+              headerIdx = i; break;
+            }
+          }
+          if (headerIdx < 0) {
+            alert('CSV format not recognized — expected keypoints CSV from the tracker');
+            return;
+          }
+
+          const cols = lines[headerIdx].split(',').map(c => c.trim());
+          const ci = (name) => cols.indexOf(name);
+
+          // Column indices
+          const txI = ci('thorax_x'), tyI = ci('thorax_y');
+          const rfwxI = ci('right_fw_tip_x'), rfwyI = ci('right_fw_tip_y');
+          const lfwxI = ci('left_fw_tip_x'), lfwyI = ci('left_fw_tip_y');
+          const rhwxI = ci('right_hw_tip_x'), rhwyI = ci('right_hw_tip_y');
+          const lhwxI = ci('left_hw_tip_x'), lhwyI = ci('left_hw_tip_y');
+
+          if (txI < 0 || rfwxI < 0) {
+            alert('CSV missing required columns (thorax_x, right_fw_tip_x, etc.)');
+            return;
+          }
+
+          // Parse frames and compute wing angles
+          trackedFrames = [];
+          for (let i = headerIdx + 1; i < lines.length; i++) {
+            const row = lines[i].split(',');
+            if (row.length < 10) continue;
+
+            const tx = parseFloat(row[txI]), ty = parseFloat(row[tyI]);
+            if (tx === 0 && ty === 0) continue;  // skip untracked frames
+
+            const rfw_x = parseFloat(row[rfwxI]), rfw_y = parseFloat(row[rfwyI]);
+            const lfw_x = parseFloat(row[lfwxI]), lfw_y = parseFloat(row[lfwyI]);
+            const rhw_x = parseFloat(row[rhwxI]), rhw_y = parseFloat(row[rhwyI]);
+            const lhw_x = parseFloat(row[lhwxI]), lhw_y = parseFloat(row[lhwyI]);
+
+            // Wing angle = atan2(-(tip_y - thorax_y), tip_x - thorax_x)
+            const fwR = Math.atan2(-(rfw_y - ty), rfw_x - tx);
+            const fwL = Math.atan2(-(lfw_y - ty), lfw_x - tx);
+            const hwR = Math.atan2(-(rhw_y - ty), rhw_x - tx);
+            const hwL = Math.atan2(-(lhw_y - ty), lhw_x - tx);
+
+            trackedFrames.push({ fwR, fwL, hwR, hwL });
+          }
+
+          if (trackedFrames.length === 0) {
+            alert('No valid tracking data found in CSV');
+            return;
+          }
+
+          // Switch to data-driven mode
+          csvMode = true;
+          simTime = 0;
+          dataFrameIdx = 0;
+          playing = true;
+
+          document.getElementById('btn-play').textContent = '⏸ Pause';
+          document.getElementById('btn-play').classList.add('active');
+          document.getElementById('sb-status').textContent =
+            `Loaded ${file.name} — ${trackedFrames.length} tracked frames @ ${csvFPS} fps`;
+          document.getElementById('sb-anim').textContent = 'Playing tracked data';
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    });
+
+    // ═══════════════════════════════════════════════════
+    //  UI CONTROLS
+    // ═══════════════════════════════════════════════════
+
+    document.getElementById('btn-play').addEventListener('click', (e) => {
+      playing = !playing;
+      e.target.classList.toggle('active');
+      e.target.textContent = playing ? '⏸ Pause' : '▶ Simulate';
+      document.getElementById('sb-anim').textContent = playing ? 'Simulating predicted movement' : 'Stationary';
+    });
+
+    document.getElementById('btn-stop').addEventListener('click', () => {
+      simTime = 0;
+      histIdx = 0;
+      histFW.fill(0); histHW.fill(0); histVel.fill(0);
+    });
+
+    document.getElementById('btn-wireframe').addEventListener('click', (e) => {
+      const on = !fwWireR.visible;
+      e.target.classList.toggle('active');
+      [fwWireR, fwWireL, hwWireR, hwWireL].forEach(w => w.visible = on);
+    });
+
+    document.getElementById('btn-axes').addEventListener('click', (e) => {
+      axesHelper.visible = !axesHelper.visible;
+      e.target.classList.toggle('active');
+    });
+
+    document.getElementById('btn-grid').addEventListener('click', (e) => {
+      gridHelper.visible = !gridHelper.visible;
+      planeMesh.visible = !planeMesh.visible;
+      e.target.classList.toggle('active');
+    });
+
+    document.getElementById('btn-front').addEventListener('click', () => {
+      camera.position.set(0, -100, 40);
+      controls.target.set(0, -5, 0);
+    });
+    document.getElementById('btn-top').addEventListener('click', () => {
+      camera.position.set(0, 0, 140);
+      controls.target.set(0, -5, 0);
+    });
+    document.getElementById('btn-iso').addEventListener('click', () => {
+      camera.position.set(60, -50, 100);
+      controls.target.set(0, -5, 0);
+    });
+    document.getElementById('btn-fit').addEventListener('click', () => {
+      camera.position.set(0, 0, 140);
+      controls.target.set(0, -5, 0);
+    });
+
+    // Harmonic slider
+    document.getElementById('input-harmonic').addEventListener('input', (e) => {
+      document.getElementById('harmonic-val').textContent = parseFloat(e.target.value).toFixed(2);
+    });
+    document.getElementById('input-speed').addEventListener('input', (e) => {
+      document.getElementById('speed-val').textContent = parseFloat(e.target.value).toFixed(1) + 'x';
+      animParams.speed = parseFloat(e.target.value);
+    });
+
+    // Apply button
+    document.getElementById('btn-apply').addEventListener('click', () => {
+      animParams.freq = parseFloat(document.getElementById('input-freq').value);
+      animParams.amplitude = parseFloat(document.getElementById('input-amp').value);
+      animParams.phaseLag = parseFloat(document.getElementById('input-phase').value);
+      animParams.asymmetry = parseFloat(document.getElementById('input-asym').value);
+      animParams.harmonic2 = parseFloat(document.getElementById('input-harmonic').value);
+      document.getElementById('sb-status').textContent = `Parameters updated: f=${animParams.freq}Hz, A=${animParams.amplitude}°`;
+    });
+
+    document.getElementById('btn-defaults').addEventListener('click', () => {
+      document.getElementById('input-freq').value = 12.0;
+      document.getElementById('input-amp').value = 44;
+      document.getElementById('input-phase').value = 15;
+      document.getElementById('input-asym').value = 5;
+      document.getElementById('input-harmonic').value = 0.15;
+      document.getElementById('harmonic-val').textContent = '0.15';
+      document.getElementById('input-speed').value = 0.3;
+      document.getElementById('speed-val').textContent = '0.3x';
+      animParams = { freq: 12, amplitude: 44, hwRatio: 0.73, phaseLag: 15, asymmetry: 5, harmonic2: 0.15, speed: 0.08 };
+      document.getElementById('sb-status').textContent = 'Reset to tracked defaults';
+    });
+
+    // Panel collapse
+    document.querySelectorAll('.panel-header').forEach(hdr => {
+      hdr.addEventListener('click', () => {
+        const body = hdr.nextElementSibling;
+        if (body) {
+          body.style.display = body.style.display === 'none' ? '' : 'none';
+          hdr.querySelector('.arrow').textContent = body.style.display === 'none' ? '▶' : '▼';
+        }
+      });
+    });
+
+    // ═══════════════════════════════════════════════════
+    //  RESIZE
+    // ═══════════════════════════════════════════════════
+
+    function onResize() {
+      const w = container.clientWidth, h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    window.addEventListener('resize', onResize);
+    onResize();
+
+    // ═══════════════════════════════════════════════════
+    //  ANIMATION LOOP
+    // ═══════════════════════════════════════════════════
+
+    let frameCount = 0;
+    let lastFpsTime = performance.now();
+
+    function animate(timestamp) {
+      requestAnimationFrame(animate);
+
+      const dt = prevTimestamp ? (timestamp - prevTimestamp) / 1000 : 0.016;
+      prevTimestamp = timestamp;
+
+      updateAnimation(dt);
+      controls.update();
+      renderer.render(scene, camera);
+      drawAxisIndicator();
+
+      // Graphs (every 2 frames)
+      if (frameCount % 2 === 0) {
+        drawGraph('graph-fw', histFW, '#5b9bd5', 'FW', -50, 50);
+        drawGraph('graph-hw', histHW, '#e07b39', 'HW', -40, 40);
+        drawGraph('graph-vel', histVel, '#6aab73', 'ω', -80, 80);
+      }
+
+      // FPS counter
+      frameCount++;
+      if (frameCount % 30 === 0) {
+        const now = performance.now();
+        const fps = 30 / ((now - lastFpsTime) / 1000);
+        document.getElementById('fps-counter').textContent = `${fps.toFixed(0)} fps`;
+        lastFpsTime = now;
+      }
+    }
+
+    animate(0);
+    document.getElementById('sb-status').textContent = 'Model loaded — parameters from tracked kinematic data';
+  </script>
+</body>
+
+</html>
