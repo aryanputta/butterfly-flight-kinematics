@@ -454,8 +454,8 @@
           </div>
           <div class="prop-row">
             <span class="prop-label">Playback Speed</span>
-            <input type="range" id="input-speed" min="0.01" max="1.0" step="0.01" value="0.08">
-            <span class="prop-value" id="speed-val" style="width:38px;text-align:right">0.08x</span>
+            <input type="range" id="input-speed" min="0.01" max="1.0" step="0.01" value="0.02">
+            <span class="prop-value" id="speed-val" style="width:38px;text-align:right">0.02x</span>
           </div>
           <div style="display:flex;gap:6px;margin-top:6px;">
             <button class="btn-sm primary" id="btn-apply">Apply</button>
@@ -964,7 +964,7 @@
       phaseLag: 15.0,      // FW/HW phase lag in degrees
       asymmetry: 5.0,      // % left/right difference
       harmonic2: 0.15,     // 2nd harmonic contribution
-      speed: 0.08,         // default 0.08x real-time (~1 wingbeat/sec for study)
+      speed: 0.02,         // slow motion for presentation (~0.24 wingbeats/sec)
     };
 
     let playing = false;
@@ -1034,21 +1034,19 @@
         vel = (fwR2 - fwR) / dtSmall;
       }
 
-      // ── IMPROVED REALISM: WING TORSION (TWIST) ──
-      // Biological wings twist during the stroke (trailing edge lags).
-      const twistFactor = 0.15;
+      // Wing torsion: subtle pronation/supination during stroke
+      const twistFactor = 0.06;
       const twist = vel * twistFactor;
 
-      // ── IMPROVED REALISM: BODY HEAVE & PITCH ──
-      // Body oscillates vertically (heave) and tilts (pitch) responsive to stroke.
-      const heaveAmp = 2.0; // mm
-      const bodyHeave = -Math.sin(csvMode ? (trackedFrames[dataFrameIdx].fwR * 2) : (fwR * 2)) * heaveAmp;
-      const bodyPitch = -vel * 0.05; // rad
+      // Body heave and pitch: subtle body oscillation
+      const heaveAmp = 1.2; // mm
+      const bodyHeave = -Math.sin(fwR * 2) * heaveAmp;
+      const bodyPitch = -vel * 0.02;
 
       butterflyGroup.position.z = bodyHeave;
       butterflyGroup.rotation.x = bodyPitch;
 
-      // Apply to wing pivots: X-axis rotation for twist, Y-axis for flap
+      // Apply to wing pivots
       fwPivotR.rotation.y = fwR;
       fwPivotR.rotation.x = -twist;
 
@@ -1134,9 +1132,9 @@
         const rhw_x = parseFloat(row[rhwxI]), rhw_y = parseFloat(row[rhwyI]);
         const lhw_x = parseFloat(row[lhwxI]), lhw_y = parseFloat(row[lhwyI]);
         const fwR = Math.atan2(-(rfw_y - ty), rfw_x - tx);
-        const fwL = Math.atan2(-(lfw_y - ty), lfw_x - tx);
+        const fwL = Math.atan2(-(lfw_y - ty), tx - lfw_x);  // mirror: left tip is left of thorax
         const hwR = Math.atan2(-(rhw_y - ty), rhw_x - tx);
-        const hwL = Math.atan2(-(lhw_y - ty), lhw_x - tx);
+        const hwL = Math.atan2(-(lhw_y - ty), tx - lhw_x);  // mirror
         trackedFrames.push({ fwR, fwL, hwR, hwL });
       }
 
@@ -1351,10 +1349,11 @@
             const lhw_x = parseFloat(row[lhwxI]), lhw_y = parseFloat(row[lhwyI]);
 
             // Wing angle = atan2(-(tip_y - thorax_y), tip_x - thorax_x)
+            // Left wings mirrored: use (tx - tip_x) so left matches right symmetrically
             const fwR = Math.atan2(-(rfw_y - ty), rfw_x - tx);
-            const fwL = Math.atan2(-(lfw_y - ty), lfw_x - tx);
+            const fwL = Math.atan2(-(lfw_y - ty), tx - lfw_x);
             const hwR = Math.atan2(-(rhw_y - ty), rhw_x - tx);
-            const hwL = Math.atan2(-(lhw_y - ty), lhw_x - tx);
+            const hwL = Math.atan2(-(lhw_y - ty), tx - lhw_x);
 
             trackedFrames.push({ fwR, fwL, hwR, hwL });
           }
@@ -1458,9 +1457,9 @@
       document.getElementById('input-asym').value = 5;
       document.getElementById('input-harmonic').value = 0.15;
       document.getElementById('harmonic-val').textContent = '0.15';
-      document.getElementById('input-speed').value = 0.3;
-      document.getElementById('speed-val').textContent = '0.3x';
-      animParams = { freq: 12, amplitude: 44, hwRatio: 0.73, phaseLag: 15, asymmetry: 5, harmonic2: 0.15, speed: 0.08 };
+      document.getElementById('input-speed').value = 0.02;
+      document.getElementById('speed-val').textContent = '0.02x';
+      animParams = { freq: 12, amplitude: 44, hwRatio: 0.73, phaseLag: 15, asymmetry: 5, harmonic2: 0.15, speed: 0.02 };
       document.getElementById('sb-status').textContent = 'Reset to tracked defaults';
     });
 
