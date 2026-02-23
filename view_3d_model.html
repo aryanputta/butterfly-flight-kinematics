@@ -986,7 +986,6 @@
 
     function computeWingAngle(t, freq, amp, phase, asym, harm2, side) {
       const ampRad = amp * Math.PI / 180;
-      const phaseRad = phase * Math.PI / 180;
       const asymFactor = side === 'left' ? (1 + asym / 100) : (1 - asym / 100);
 
       // Multi-harmonic model from tracked data analysis
@@ -1035,9 +1034,27 @@
         vel = (fwR2 - fwR) / dtSmall;
       }
 
-      // Apply to wing pivots
+      // ── IMPROVED REALISM: WING TORSION (TWIST) ──
+      // Biological wings twist during the stroke (trailing edge lags).
+      const twistFactor = 0.15;
+      const twist = vel * twistFactor;
+
+      // ── IMPROVED REALISM: BODY HEAVE & PITCH ──
+      // Body oscillates vertically (heave) and tilts (pitch) responsive to stroke.
+      const heaveAmp = 2.0; // mm
+      const bodyHeave = -Math.sin(csvMode ? (trackedFrames[dataFrameIdx].fwR * 2) : (fwR * 2)) * heaveAmp;
+      const bodyPitch = -vel * 0.05; // rad
+
+      butterflyGroup.position.z = bodyHeave;
+      butterflyGroup.rotation.x = bodyPitch;
+
+      // Apply to wing pivots: X-axis rotation for twist, Y-axis for flap
       fwPivotR.rotation.y = fwR;
+      fwPivotR.rotation.x = -twist;
+
       fwPivotL.rotation.y = -fwL;
+      fwPivotL.rotation.x = -twist;
+
       hwPivotR.rotation.y = hwR;
       hwPivotL.rotation.y = -hwL;
 
@@ -1064,6 +1081,75 @@
       histVel[histIdx % GRAPH_LEN] = vel;
       histIdx++;
     }
+
+    // ── AUTOMATED DATA LOADING ──
+    // Attempt to load the local project tracking data automatically on start
+    async function tryAutoLoadData() {
+      const paths = [
+        'output/combined/tracking/keypoints_all_frames.csv',
+        'keypoints_all_frames.csv'
+      ];
+      for (const p of paths) {
+        try {
+          const resp = await fetch(p);
+          if (resp.ok) {
+            const text = await resp.text();
+            processCSV(text, p);
+            return;
+          }
+        } catch (e) { }
+      }
+    }
+
+    function processCSV(text, filename) {
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const m = line.match(/^#\s*FPS:\s*([\d.]+)/i);
+        if (m) { csvFPS = parseFloat(m[1]); break; }
+      }
+      let headerIdx = -1;
+      for (let i = 0; i < lines.length; i++) {
+        if (!lines[i].startsWith('#') && lines[i].includes('frame')) {
+          headerIdx = i; break;
+        }
+      }
+      if (headerIdx < 0) return;
+
+      const cols = lines[headerIdx].split(',').map(c => c.trim());
+      const ci = (name) => cols.indexOf(name);
+      const txI = ci('thorax_x'), tyI = ci('thorax_y');
+      const rfwxI = ci('right_fw_tip_x'), rfwyI = ci('right_fw_tip_y');
+      const lfwxI = ci('left_fw_tip_x'), lfwyI = ci('left_fw_tip_y');
+      const rhwxI = ci('right_hw_tip_x'), rhwyI = ci('right_hw_tip_y');
+      const lhwxI = ci('left_hw_tip_x'), lhwyI = ci('left_hw_tip_y');
+
+      trackedFrames = [];
+      for (let i = headerIdx + 1; i < lines.length; i++) {
+        const row = lines[i].split(',');
+        if (row.length < 10) continue;
+        const tx = parseFloat(row[txI]), ty = parseFloat(row[tyI]);
+        if (tx === 0 && ty === 0) continue;
+        const rfw_x = parseFloat(row[rfwxI]), rfw_y = parseFloat(row[rfwyI]);
+        const lfw_x = parseFloat(row[lfwxI]), lfw_y = parseFloat(row[lfwyI]);
+        const rhw_x = parseFloat(row[rhwxI]), rhw_y = parseFloat(row[rhwyI]);
+        const lhw_x = parseFloat(row[lhwxI]), lhw_y = parseFloat(row[lhwyI]);
+        const fwR = Math.atan2(-(rfw_y - ty), rfw_x - tx);
+        const fwL = Math.atan2(-(lfw_y - ty), lfw_x - tx);
+        const hwR = Math.atan2(-(rhw_y - ty), rhw_x - tx);
+        const hwL = Math.atan2(-(lhw_y - ty), lhw_x - tx);
+        trackedFrames.push({ fwR, fwL, hwR, hwL });
+      }
+
+      if (trackedFrames.length > 0) {
+        csvMode = true; simTime = 0; dataFrameIdx = 0; playing = true;
+        document.getElementById('btn-play').textContent = 'Pause';
+        document.getElementById('btn-play').classList.add('active');
+        document.getElementById('sb-status').textContent = `Loaded ${filename} — ${trackedFrames.length} tracked frames`;
+      }
+    }
+
+    // Trigger auto-load after short delay to ensure UI ready
+    setTimeout(tryAutoLoadData, 1000);
 
     // ═══════════════════════════════════════════════════
     //  LIVE GRAPHS
