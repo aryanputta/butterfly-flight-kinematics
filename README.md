@@ -1,33 +1,71 @@
 # Butterfly Flight Kinematics
 
-This project analyzes the biomechanics of butterfly flight by extracting 3D wing motions from high-speed video data.
+Extracts wing kinematics from high-speed video of *Morpho peleides* and fits harmonic models for simulation.
 
 Aryan Putta
 
 ---
 
-## Technical Overview
+## Pipeline Overview
 
-The system uses computer vision to track anatomical points on a butterfly's wings. This data is used to calculate flight metrics like wingbeat frequency and stroke amplitude, which then drive an interactive 3D model for study and visualization.
+| Stage | Method | Output |
+|-------|--------|--------|
+| Tracking | Lucas–Kanade optical flow, 36 points | per-frame (x, y) positions |
+| Angle extraction | atan2 from thorax → wing tip | θ(t) time series |
+| Harmonic fitting | Nonlinear least squares (LsqFit.jl) | A, f, h, φ parameters |
+| Export | MATLAB / Julia / CSV / CFD header | simulation-ready θ(t) |
 
 ---
 
 ## Computer Vision Tracking
 
-We use Lucas-Kanade optical flow to track 36 specific points on the butterfly. This includes 11 anatomical landmarks (like the head and wing tips) and 25 texture features. The tracker is designed to isolate the insect from the background, ensuring the data is strictly focused on the wing movement.
+The tracker detects 11 anatomical landmarks and up to 25 Shi–Tomasi texture features, refined to subpixel accuracy. Tracking uses a 3-level image pyramid to handle large displacements. Every tracked point passes a forward–backward consistency check to catch drift.
 
 <img src="docs/images/tracking_demo.gif" width="600" alt="Tracking Demo">
 
 ---
 
-## Kinematic Analysis
+## Wing Stroke Angle
 
-The raw tracking data is converted into actionable metrics. We calculate the angle of each wing relative to the body and use a Fast Fourier Transform (FFT) to find the exact frequency of the wingbeats. This moves beyond simple sine waves to capture the real, asymmetrical rhythm of biological flight.
+The stroke angle θ(t) is computed from the thorax-to-tip vector for each wing, with a y-axis flip to convert from image to math coordinates:
+
+<img src="docs/images/stroke_angle_geometry.png" width="450" alt="Stroke Angle Geometry">
+
+---
+
+## Noise Propagation
+
+Each successive derivative amplifies tracking noise. This is why raw acceleration is essentially unusable without filtering:
+
+<img src="docs/images/noise_propagation.png" width="500" alt="Noise Propagation Through Derivatives">
+
+Subpixel refinement (10× less pixel noise) and Savitzky–Golay filtering (3× additional reduction) combine for ~30× lower noise in acceleration.
+
+---
+
+## Harmonic Fitting
+
+The wingbeat is modeled as a two-harmonic Fourier series. The second harmonic captures the asymmetry between the faster downstroke and slower upstroke:
+
+<img src="docs/images/harmonic_model.png" width="500" alt="Two-Harmonic Model">
+
+Fitting uses `LsqFit.jl` with time normalization for numerical stability. A third harmonic can be added if residuals show structure at 3f. The fit produces 95% confidence intervals, R², and Durbin–Watson autocorrelation checks.
+
+---
+
+## Signal Conditioning
+
+- **Savitzky–Golay** — preserves waveform shape, used for velocity/acceleration
+- **Butterworth low-pass** — strict frequency cutoff, used before harmonic fitting
+- **RANSAC** — rejects outlier points that violate the rigid-body wing model
+
+---
+
+## Kinematic Analysis
 
 <img src="docs/images/tracking_dashboard.png" width="600" alt="Dashboard">
 
 ### PCA Motion Compression
-By applying Principal Component Analysis (PCA), we can compress the complex motion of the wings into its most significant modes. This filters out noise and reveals the primary patterns of the flight stroke.
 
 <img src="docs/images/pca_decomposition.png" width="600" alt="PCA Decomposition">
 
@@ -35,16 +73,8 @@ By applying Principal Component Analysis (PCA), we can compress the complex moti
 
 ## Interactive 3D Viewer
 
-The processed data is visualized in a browser-based 3D model. The model features anatomically accurate wing shapes and iridescent materials that mimic a Morpho peleides. It can either simulate flight based on calculated parameters or play back real tracked data frame-by-frame. The model also includes wing torsion (trailing-edge lag) and body heave/pitch responsive to the stroke cycle.
-
 <img src="docs/images/model_top_view.png" width="400" alt="Top View"> <img src="docs/images/model_iso_view.png" width="400" alt="Iso View">
 <img src="docs/images/model_animating.png" width="600" alt="Flapping Animation">
-
----
-
-## Integrated Julia Notebook
-
-A Pluto.jl notebook (`notebooks/integrated_flight_tracker.jl`) provides a single interface for running the full pipeline, viewing kinematic plots with FFT analysis, inspecting raw data tables, and exploring the 3D model — all in one tab.
 
 ---
 
@@ -59,27 +89,45 @@ pip install -r requirements.txt
 ```bash
 python run_pipeline.py data/raw/morpho_peleides.mp4 --live
 ```
-The `--live` flag opens an OpenCV window showing the tracking in real time.
 
-### 3. Open 3D Viewer
+### 3. Harmonic Fitting (Julia)
+```bash
+cd notebooks
+julia harmonic_fitting.jl --test                          # self-test
+julia harmonic_fitting.jl ../output/kinematics.csv        # fit from data
+julia harmonic_fitting.jl ../output/kinematics.csv --3harm # three harmonics
+```
+
+### 4. 3D Viewer
 ```bash
 python3 -m http.server 8765
 open http://localhost:8765/view_3d_model.html
 ```
-The viewer auto-loads tracked data from `output/combined/tracking/keypoints_all_frames.csv` on startup. You can also click **Load CSV** to select a different file.
 
-### 4. Julia Notebook (optional)
+### 5. Pluto Notebook (optional)
 ```bash
 julia -e 'using Pluto; Pluto.run()'
 ```
-Open `notebooks/integrated_flight_tracker.jl` from the Pluto interface.
 
 ---
 
 ## File Structure
 
-- **Core Scripts**: `run_pipeline.py` (entry point), `multipoint_tracker.py` (CV logic).
-- **Analysis**: `extract_kinematics.py` (math), `parametric_3d_model.py` (PCA).
-- **Viewer**: `view_3d_model.html` (3D interface with data-driven animation).
-- **Notebook**: `notebooks/integrated_flight_tracker.jl` (integrated Pluto dashboard).
-- **Docs**: `docs/TRACKING_MATH.md` (detailed equations).
+- **Core**: `run_pipeline.py`, `multipoint_tracker.py`
+- **Analysis**: `src/analysis.py` (SavGol, Butterworth, FFT, RANSAC, stroke angle)
+- **Error Analysis**: `src/error_propagation.py`
+- **Calibration**: `src/camera_calibration.py`
+- **Export**: `src/simulation_export.py` (MATLAB, Julia, CSV, CFD)
+- **Harmonic Fitting**: `notebooks/harmonic_fitting.jl`
+- **Viewer**: `view_3d_model.html`
+- **Notebook**: `notebooks/integrated_flight_tracker.jl`
+- **Docs**: `docs/TRACKING_MATH.md`
+
+---
+
+## Assumptions
+
+1. **2D projection** — single camera, no out-of-plane correction
+2. **Rigid wing** — no torsion/camber deformation in the kinematic fit
+3. **Constant frequency** — assumes steady-state wingbeat
+4. **Symmetric stroke** — second harmonic captures some asymmetry; third adds more
