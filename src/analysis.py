@@ -6,7 +6,7 @@ FFT-based frequency estimation, and comprehensive kinematics computation.
 """
 
 import numpy as np
-from scipy.signal import savgol_filter, find_peaks
+from scipy.signal import savgol_filter, find_peaks, butter, filtfilt
 from scipy.fft import fft, fftfreq
 from typing import Dict, Tuple, Optional
 
@@ -256,3 +256,155 @@ def compute_kinematics(angles: np.ndarray, fps: float,
         "fft_freqs": fft_freqs,
         "fft_magnitudes": fft_mags,
     }
+
+
+# ──────────────────────────────────────────────────────────
+#  Butterworth low-pass filter
+# ──────────────────────────────────────────────────────────
+
+def butterworth_lowpass(data: np.ndarray, fps: float,
+                        cutoff_hz: float, order: int = 4) -> np.ndarray:
+    """Zero-phase Butterworth low-pass filter.
+
+    Uses scipy.signal.filtfilt for zero phase shift (forward-backward).
+    Preserves stroke frequency while attenuating noise above cutoff_hz.
+
+    Butterworth is preferred over Savitzky-Golay when you want a strict
+    frequency-domain cutoff — e.g., to prevent aliasing in harmonic fits.
+    SavGol is better for preserving transient waveform shape.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Input signal (1D).
+    fps : float
+        Sampling rate in Hz.
+    cutoff_hz : float
+        Cutoff frequency in Hz. Typically 2-3× the wingbeat frequency.
+    order : int
+        Filter order (higher = sharper rolloff, but more ringing risk).
+    """
+    if len(data) < 3 * order:
+        return data.copy()
+
+    nyquist = fps / 2.0
+    normalized_cutoff = min(cutoff_hz / nyquist, 0.99)
+    b, a = butter(order, normalized_cutoff, btype='low')
+    return filtfilt(b, a, data)
+
+
+# ──────────────────────────────────────────────────────────
+#  RANSAC rigid-body outlier rejection
+# ──────────────────────────────────────────────────────────
+
+def ransac_fit_rigid(pts_prev: np.ndarray, pts_curr: np.ndarray,
+                     n_iter: int = 100, inlier_threshold: float = 3.0,
+                     min_inlier_ratio: float = 0.6) -> Tuple[np.ndarray, np.ndarray]:
+    """RANSAC-based rigid (affine) motion outlier rejection.
+
+    Fits a 2D affine transform between consecutive-frame point clouds
+    and rejects points whose residual exceeds the threshold. Maintains
+    a dominant rigid-body wing model — points that violate rigidity
+    (e.g., from tracking drift or occlusion) are flagged.
+
+    Parameters
+    ----------
+    pts_prev : np.ndarray
+        Previous frame points, shape (N, 2).
+    pts_curr : np.ndarray
+        Current frame points, shape (N, 2).
+    n_iter : int
+        Number of RANSAC iterations.
+    inlier_threshold : float
+        Maximum residual (px) for a point to be considered an inlier.
+    min_inlier_ratio : float
+        Minimum fraction of inliers to accept the model.
+
+    Returns
+    -------
+    inlier_mask : np.ndarray
+        Boolean mask, shape (N,). True = inlier.
+    residuals : np.ndarray
+        Per-point residual distances, shape (N,).
+    """
+    N = len(pts_prev)
+    if N < 3:
+        return np.ones(N, dtype=bool), np.zeros(N)
+
+    best_mask = np.ones(N, dtype=bool)
+    best_count = 0
+
+    for _ in range(n_iter):
+        # Sample 3 random correspondences (minimum for affine)
+        idx = np.random.choice(N, size=3, replace=False)
+        src = pts_prev[idx]
+        dst = pts_curr[idx]
+
+        # Solve affine: dst = A @ src + t
+        # Construct [x y 1] matrix
+        ones = np.ones((3, 1))
+        A_mat = np.hstack([src, ones])  # (3, 3)
+        try:
+            params_x = np.linalg.solve(A_mat, dst[:, 0])
+            params_y = np.linalg.solve(A_mat, dst[:, 1])
+        except np.linalg.LinAlgError:
+            continue
+
+        # Apply to all points
+        full_A = np.hstack([pts_prev, np.ones((N, 1))])
+        pred_x = full_A @ params_x
+        pred_y = full_A @ params_y
+        pred = np.stack([pred_x, pred_y], axis=1)
+
+        residuals = np.sqrt(np.sum((pts_curr - pred) ** 2, axis=1))
+        mask = residuals < inlier_threshold
+        count = np.sum(mask)
+
+        if count > best_count:
+            best_count = count
+            best_mask = mask
+            best_residuals = residuals
+
+    if best_count < min_inlier_ratio * N:
+        # Not enough inliers — don't reject anything
+        return np.ones(N, dtype=bool), np.sqrt(
+            np.sum((pts_curr - pts_prev) ** 2, axis=1)
+        )
+
+    return best_mask, best_residuals
+
+
+# ──────────────────────────────────────────────────────────
+#  Stroke angle θ(t)
+# ──────────────────────────────────────────────────────────
+
+def compute_stroke_angle(tip_xy: np.ndarray,
+                         thorax_xy: np.ndarray) -> np.ndarray:
+    """Compute wing stroke angle θ(t) from thorax and tip positions.
+
+    θ(t) = atan2(-(tip_y - thorax_y), tip_x - thorax_x)
+
+    The minus sign on y flips image coordinates (y-down) to standard
+    math convention (y-up). Result is unwrapped to avoid ±π jumps.
+
+    Parameters
+    ----------
+    tip_xy : np.ndarray
+        Wing tip positions, shape (T, 2).
+    thorax_xy : np.ndarray
+        Thorax positions, shape (T, 2) or (2,) if stationary.
+
+    Returns
+    -------
+    theta : np.ndarray
+        Stroke angle in radians, shape (T,), unwrapped.
+    """
+    thorax = np.atleast_2d(thorax_xy)
+    if thorax.shape[0] == 1:
+        thorax = np.broadcast_to(thorax, tip_xy.shape)
+
+    dx = tip_xy[:, 0] - thorax[:, 0]
+    dy = -(tip_xy[:, 1] - thorax[:, 1])  # flip y-axis
+
+    theta = np.arctan2(dy, dx)
+    return np.unwrap(theta)
