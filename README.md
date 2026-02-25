@@ -33,16 +33,6 @@ The stroke angle θ(t) is computed from the thorax-to-tip vector for each wing, 
 
 ---
 
-## Noise Propagation
-
-Each successive derivative amplifies tracking noise. This is why raw acceleration is essentially unusable without filtering:
-
-<img src="docs/images/noise_propagation.png" width="500" alt="Noise Propagation Through Derivatives">
-
-Subpixel refinement (10× less pixel noise) and Savitzky–Golay filtering (3× additional reduction) combine for ~30× lower noise in acceleration.
-
----
-
 ## Harmonic Fitting
 
 The wingbeat is modeled as a two-harmonic Fourier series. The second harmonic captures the asymmetry between the faster downstroke and slower upstroke:
